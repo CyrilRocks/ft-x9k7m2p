@@ -857,6 +857,21 @@ input, select, textarea { font-family: inherit; }
     </div>
 
     <div class="settings-section">
+      <h3>💳 Manage Accounts</h3>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px">
+        Add your bank accounts, credit cards, and UPI apps. Include last 4 digits for easy identification.
+      </p>
+      <div id="accountList"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:end">
+        <div style="flex:1">
+          <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:4px">ACCOUNT NAME</label>
+          <input type="text" class="form-control" id="newAccName" placeholder="e.g. HDFC CC: 1234" style="padding:8px 12px;font-size:0.85rem">
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="addNewAccount()" style="height:36px">+ Add</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
       <h3>👥 Manage "Spent For" (Beneficiaries)</h3>
       <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px">
         Add people or entities you spend money for — friends, relatives, office, etc.
@@ -1076,36 +1091,25 @@ const CONFIG = {
   people: ['Me', 'Mother', 'Father', 'Sonu'],
 
   // ── Income per person (monthly, in ₹) ─────────────────────
-  // Set to 0 for non-earning members. Edit in Settings too.
+  // These are DEFAULT values only — override in Settings → Family Income.
+  // Stored in localStorage, not visible in source code after first setup.
   income: {
-    'Me':     67500,   // ~₹65-70K average (Microsoft joining Jan 2027)
-    'Mother': 70000,
+    'Me':     0,
+    'Mother': 0,
     'Father': 0,
     'Sonu':   0,
   },
 
   // ── Payment Accounts ───────────────────────────────────────
-  // Add your bank accounts, credit cards, UPI, cash, etc.
-  // Format: 'Card/Account Name (last 4 digits)' for easy identification
+  // DEFAULT accounts — customize in Settings on each device.
   accounts: [
-    // — Mom's Cards —
-    'HDFC Diners CC: 0490 (Mom)',
-    'SBI CC: 2726 (Mom)',
-    'SBI Cashback CC: 5281 (Mom)',
-    // — My Cards —
-    'HDFC UPI RuPay CC: 1869',
-    'HDFC MoneyBack+ CC: 1269',
-    'ICICI Bank CC: 8008',
-    // — UPI Apps —
+    'Bank Account 1',
+    'Bank Account 2',
+    'Credit Card 1',
+    'Credit Card 2',
     'GPay',
     'Amazon Pay',
     'Paytm',
-    // — Bank Accounts —
-    'HDFC Bank A/c',
-    'ICICI Bank A/c (Salary)',
-    'SBI Bank A/c',
-    'Kotak Bank A/c',
-    // — Cash —
     'Cash',
   ],
 
@@ -1148,15 +1152,9 @@ const CONFIG = {
   },
 
   // ── SIP Portfolio Details ────────────────────────────────────
-  // Your mutual fund SIPs for reference and tracking
-  sipPortfolio: [
-    { fund: 'Parag Parikh Flexi Cap Fund',       sip: 3000, dueDate: 28, invested: 57997, current: 57284 },
-    { fund: 'UTI Nifty 50 Index Fund',           sip: 2250, dueDate: 18, invested: 45498, current: 43233 },
-    { fund: 'Nippon India Small Cap Fund',        sip: 1750, dueDate: 19, invested: 34498, current: 35371 },
-    { fund: 'Motilal Oswal Midcap Fund',          sip: 1000, dueDate: 24, invested: 20999, current: 21046 },
-    { fund: 'SBI Gold Direct Plan',               sip: 1000, dueDate: 15, invested: 11999, current: 11931 },
-    { fund: 'JM Flexi Cap Fund',                  sip: 0,    dueDate: 0,  invested: 3000,  current: 2849  },
-  ],
+  // Default empty — configure in Settings → Investments on each device.
+  // Data is stored in localStorage, not visible in source code.
+  sipPortfolio: [],
 
   // ── Beneficiaries (who the expense is FOR) ──────────────────
   // "Paid By" = whose money was used
@@ -1182,7 +1180,7 @@ const CONFIG = {
   // Set a cap on personal spending per person (optional)
   // This helps you avoid overspending on yourself
   personalLimits: {
-    'Me': 15000,   // Your personal expense cap from Jan 2027
+    'Me': 0,   // Set your personal expense cap in Settings
   },
 
   // ── Currency ───────────────────────────────────────────────
@@ -1260,6 +1258,32 @@ const DB = {
     this.saveBeneficiaries(this.getBeneficiaries().filter(b => b !== name));
   },
 
+  // Accounts (dynamic — stored in localStorage)
+  getAccounts() {
+    return this._get('accounts', CONFIG.accounts);
+  },
+  saveAccounts(list) {
+    this._set('accounts', list);
+  },
+  addAccount(name) {
+    const list = this.getAccounts();
+    if (list.find(a => a.toLowerCase() === name.toLowerCase())) return false;
+    list.push(name);
+    this.saveAccounts(list);
+    return true;
+  },
+  deleteAccount(name) {
+    this.saveAccounts(this.getAccounts().filter(a => a !== name));
+  },
+
+  // SIP Portfolio (dynamic — stored in localStorage)
+  getSipPortfolio() {
+    return this._get('sipPortfolio', CONFIG.sipPortfolio);
+  },
+  saveSipPortfolio(list) {
+    this._set('sipPortfolio', list);
+  },
+
   // Categories (dynamic — stored in localStorage, seeded from CONFIG)
   getCategories() {
     return this._get('categories', CONFIG.categories);
@@ -1298,6 +1322,9 @@ const DB = {
       budgets: this.getBudgets(),
       income: this.getIncome(),
       categories: this.getCategories(),
+      accounts: this.getAccounts(),
+      beneficiaries: this.getBeneficiaries(),
+      sipPortfolio: this.getSipPortfolio(),
       settings: this.getSettings(),
       exportedAt: new Date().toISOString(),
       version: '1.0',
@@ -1308,11 +1335,14 @@ const DB = {
     if (data.recurring)  this.saveRecurring(data.recurring);
     if (data.budgets)    this.saveBudgets(data.budgets);
     if (data.income)     this.saveIncome(data.income);
-    if (data.categories) this.saveCategories(data.categories);
-    if (data.settings)   this.saveSettings(data.settings);
+    if (data.categories)    this.saveCategories(data.categories);
+    if (data.accounts)      this.saveAccounts(data.accounts);
+    if (data.beneficiaries) this.saveBeneficiaries(data.beneficiaries);
+    if (data.sipPortfolio)  this.saveSipPortfolio(data.sipPortfolio);
+    if (data.settings)      this.saveSettings(data.settings);
   },
   clearAll() {
-    ['expenses','recurring','budgets','income','categories','settings'].forEach(k =>
+    ['expenses','recurring','budgets','income','categories','accounts','beneficiaries','sipPortfolio','settings','personalLimits'].forEach(k =>
       localStorage.removeItem('fintrack_' + k)
     );
   },
@@ -1911,7 +1941,22 @@ function renderBudgets() {
 
 /* ──────────────── INVESTMENTS / SIP PORTFOLIO ──────────────── */
 function renderInvestments() {
-  const portfolio = CONFIG.sipPortfolio;
+  const portfolio = DB.getSipPortfolio();
+  if (portfolio.length === 0) {
+    document.getElementById('investmentStats').innerHTML = '';
+    document.getElementById('sipSchedule').innerHTML = '';
+    document.getElementById('fundDetails').innerHTML = `
+      <div class="empty-state">
+        <div class="icon">📈</div>
+        <p>No investment data configured yet</p>
+        <p style="font-size:0.8rem;color:var(--text-muted);margin-top:8px">
+          To set up your portfolio, add fund details via the button below.
+        </p>
+        <button class="btn btn-primary btn-sm" onclick="openAddFundModal()" style="margin-top:12px">+ Add Fund</button>
+      </div>
+    `;
+    return;
+  }
   const totalInvested = portfolio.reduce((a, f) => a + f.invested, 0);
   const totalCurrent  = portfolio.reduce((a, f) => a + f.current, 0);
   const totalReturn   = totalCurrent - totalInvested;
@@ -2012,6 +2057,15 @@ function getOrdinal(n) {
 
 /* ──────────────── SETTINGS ──────────────── */
 function renderSettings() {
+  // Account management list
+  const allAccs = DB.getAccounts();
+  document.getElementById('accountList').innerHTML = allAccs.map(a => `
+    <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;margin:3px;border-radius:20px;background:var(--bg-input);border:1px solid var(--border);font-size:0.85rem">
+      <span>💳 ${a}</span>
+      <button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:0.8rem;padding:0 2px" onclick="removeAccount('${a.replace(/'/g, "\\'")}')" title="Remove">✕</button>
+    </div>
+  `).join('');
+
   // Beneficiary management list
   const allBens = DB.getBeneficiaries();
   const defaultBenNames = new Set(CONFIG.beneficiaries);
@@ -2206,6 +2260,38 @@ function quickAddBeneficiary() {
   refreshBeneficiaryUI();
   document.getElementById('expBeneficiary').value = name.trim();
   showToast(`Added "${name.trim()}"`, 'success');
+}
+
+function addNewAccount() {
+  const name = document.getElementById('newAccName').value.trim();
+  if (!name) { showToast('Please enter an account name', 'error'); return; }
+  const success = DB.addAccount(name);
+  if (!success) { showToast('Already exists!', 'warning'); return; }
+  document.getElementById('newAccName').value = '';
+  showToast(`Added account: ${name}`, 'success');
+  renderSettings();
+  refreshAccountUI();
+}
+
+function removeAccount(name) {
+  if (!confirm(`Remove account "${name}"?`)) return;
+  DB.deleteAccount(name);
+  showToast(`Removed account: ${name}`, 'success');
+  renderSettings();
+  refreshAccountUI();
+}
+
+function refreshAccountUI() {
+  const accs = DB.getAccounts();
+  populateSelect('expAccount', accs);
+  populateSelect('recAccount', accs);
+  const filterAcc = document.getElementById('filterAccount');
+  if (filterAcc) {
+    const cur = filterAcc.value;
+    filterAcc.innerHTML = '<option value="">All Accounts</option>';
+    accs.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; filterAcc.appendChild(o); });
+    filterAcc.value = cur;
+  }
 }
 
 
@@ -2497,12 +2583,11 @@ function seedRecurringIfFirstRun() {
   if (localStorage.getItem('fintrack_seeded')) return;
 
   const defaults = [
-    { name: 'Parag Parikh Flexi Cap SIP',   amount: 3000, category: 'SIP / Investment', day: 28, person: 'Me', account: 'HDFC Bank A/c', beneficiary: 'Self' },
-    { name: 'UTI Nifty 50 Index SIP',       amount: 2250, category: 'SIP / Investment', day: 18, person: 'Me', account: 'HDFC Bank A/c', beneficiary: 'Self' },
-    { name: 'Nippon Small Cap SIP',          amount: 1750, category: 'SIP / Investment', day: 19, person: 'Me', account: 'HDFC Bank A/c', beneficiary: 'Self' },
-    { name: 'Motilal Oswal Midcap SIP',     amount: 1000, category: 'SIP / Investment', day: 24, person: 'Me', account: 'HDFC Bank A/c', beneficiary: 'Self' },
-    { name: 'SBI Gold Direct SIP',           amount: 1000, category: 'SIP / Investment', day: 15, person: 'Me', account: 'HDFC Bank A/c', beneficiary: 'Self' },
-    { name: 'Amazon Pay Gift Card (5% CB)',  amount: 10000, category: 'Utilities',      day: 1,  person: 'Me', account: 'SBI Cashback CC: 5281 (Mom)', beneficiary: 'Family' },
+    { name: 'SIP - Fund 1',   amount: 3000, category: 'SIP / Investment', day: 28, person: 'Me', account: DB.getAccounts()[0], beneficiary: 'Self' },
+    { name: 'SIP - Fund 2',   amount: 2250, category: 'SIP / Investment', day: 18, person: 'Me', account: DB.getAccounts()[0], beneficiary: 'Self' },
+    { name: 'SIP - Fund 3',   amount: 1750, category: 'SIP / Investment', day: 19, person: 'Me', account: DB.getAccounts()[0], beneficiary: 'Self' },
+    { name: 'SIP - Fund 4',   amount: 1000, category: 'SIP / Investment', day: 24, person: 'Me', account: DB.getAccounts()[0], beneficiary: 'Self' },
+    { name: 'SIP - Fund 5',   amount: 1000, category: 'SIP / Investment', day: 15, person: 'Me', account: DB.getAccounts()[0], beneficiary: 'Self' },
   ];
 
   defaults.forEach(d => DB.addRecurring(d));
@@ -2536,13 +2621,14 @@ function initApp() {
 
   // Populate dropdowns
   const bens = DB.getBeneficiaries();
+  const accs = DB.getAccounts();
   populateSelect('expPerson', CONFIG.people);
   populateSelect('expBeneficiary', bens);
-  populateSelect('expAccount', CONFIG.accounts);
+  populateSelect('expAccount', accs);
   populateSelect('recCategory', cats.map(c => c.name));
   populateSelect('recPerson', CONFIG.people);
   populateSelect('recBeneficiary', bens);
-  populateSelect('recAccount', CONFIG.accounts);
+  populateSelect('recAccount', accs);
 
   // Populate filter dropdowns
   const filterCat = document.getElementById('filterCategory');
@@ -2551,7 +2637,7 @@ function initApp() {
   const filterPer = document.getElementById('filterPerson');
   CONFIG.people.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; filterPer.appendChild(o); });
   const filterAcc = document.getElementById('filterAccount');
-  CONFIG.accounts.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; filterAcc.appendChild(o); });
+  accs.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; filterAcc.appendChild(o); });
   const filterBen = document.getElementById('filterBeneficiary');
   if (filterBen) {
     bens.forEach(b => { const o = document.createElement('option'); o.value = b; o.textContent = b; filterBen.appendChild(o); });
